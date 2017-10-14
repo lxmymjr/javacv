@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2015 Samuel Audet
+ * Copyright (C) 2009-2017 Samuel Audet
  *
  * Licensed either under the Apache License, Version 2.0, or (at your option)
  * under the terms of the GNU General Public License as published by
@@ -49,20 +49,26 @@
 
 package org.bytedeco.javacv;
 
+import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.Map.Entry;
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacpp.DoublePointer;
 import org.bytedeco.javacpp.IntPointer;
 import org.bytedeco.javacpp.Loader;
+import org.bytedeco.javacpp.Pointer;
 import org.bytedeco.javacpp.PointerPointer;
 
 import static org.bytedeco.javacpp.avcodec.*;
 import static org.bytedeco.javacpp.avdevice.*;
 import static org.bytedeco.javacpp.avformat.*;
 import static org.bytedeco.javacpp.avutil.*;
+import static org.bytedeco.javacpp.swresample.*;
 import static org.bytedeco.javacpp.swscale.*;
 
 /**
@@ -111,6 +117,7 @@ public class FFmpegFrameGrabber extends FrameGrabber {
     static {
         try {
             tryLoad();
+            FFmpegLockCallback.init();
         } catch (Exception ex) { }
     }
 
@@ -119,16 +126,23 @@ public class FFmpegFrameGrabber extends FrameGrabber {
     }
     public FFmpegFrameGrabber(String filename) {
         this.filename = filename;
+        this.pixelFormat = AV_PIX_FMT_NONE;
+        this.sampleFormat = AV_SAMPLE_FMT_NONE;
+    }
+    public FFmpegFrameGrabber(InputStream inputStream) {
+        this.inputStream = inputStream;
+        this.pixelFormat = AV_PIX_FMT_NONE;
+        this.sampleFormat = AV_SAMPLE_FMT_NONE;
     }
     public void release() throws Exception {
-        synchronized (org.bytedeco.javacpp.avcodec.class) {
+        // synchronized (org.bytedeco.javacpp.avcodec.class) {
             releaseUnsafe();
-        }
+        // }
     }
     void releaseUnsafe() throws Exception {
         if (pkt != null && pkt2 != null) {
             if (pkt2.size() > 0) {
-                av_free_packet(pkt);
+                av_packet_unref(pkt);
             }
             pkt = pkt2 = null;
         }
@@ -153,7 +167,7 @@ public class FFmpegFrameGrabber extends FrameGrabber {
 
         // Close the video codec
         if (video_c != null) {
-            avcodec_close(video_c);
+            avcodec_free_context(video_c);
             video_c = null;
         }
 
@@ -165,12 +179,12 @@ public class FFmpegFrameGrabber extends FrameGrabber {
 
         // Close the audio codec
         if (audio_c != null) {
-            avcodec_close(audio_c);
+            avcodec_free_context(audio_c);
             audio_c = null;
         }
 
         // Close the video file
-        if (oc != null && !oc.isNull()) {
+        if (inputStream == null && oc != null && !oc.isNull()) {
             avformat_close_input(oc);
             oc = null;
         }
@@ -180,17 +194,107 @@ public class FFmpegFrameGrabber extends FrameGrabber {
             img_convert_ctx = null;
         }
 
+        if (samples_ptr_out != null) {
+            for (int i = 0; i < samples_ptr_out.length; i++) {
+                av_free(samples_ptr_out[i].position(0));
+            }
+            samples_ptr_out = null;
+            samples_buf_out = null;
+        }
+
+        if (samples_convert_ctx != null) {
+            swr_free(samples_convert_ctx);
+            samples_convert_ctx = null;
+        }
+
         got_frame     = null;
         frameGrabbed  = false;
         frame         = null;
         timestamp     = 0;
         frameNumber   = 0;
+
+        if (inputStream != null) {
+            try {
+                if (oc == null) {
+                    // when called a second time
+                    inputStream.close();
+                } else {
+                    inputStream.reset();
+                }
+            } catch (IOException ex) {
+                throw new Exception("Error on InputStream.close(): ", ex);
+            } finally {
+                inputStreams.remove(oc);
+                if (avio != null) {
+                    if (avio.buffer() != null) {
+                        av_free(avio.buffer());
+                        avio.buffer(null);
+                    }
+                    av_free(avio);
+                    avio = null;
+                }
+                if (oc != null) {
+                    avformat_free_context(oc);
+                    oc = null;
+                }
+            }
+        }
     }
     @Override protected void finalize() throws Throwable {
         super.finalize();
         release();
     }
 
+    static HashMap<Pointer,InputStream> inputStreams = new HashMap<Pointer,InputStream>();
+
+    static class ReadCallback extends Read_packet_Pointer_BytePointer_int {
+        @Override public int call(Pointer opaque, BytePointer buf, int buf_size) {
+            try {
+                byte[] b = new byte[buf_size];
+                InputStream is = inputStreams.get(opaque);
+                int size = is.read(b, 0, buf_size);
+                if (size < 0) {
+                    return 0;
+                } else {
+                    buf.put(b, 0, size);
+                    return size;
+                }
+            }
+            catch (Throwable t) {
+                System.err.println("Error on InputStream.read(): " + t);
+                return -1;
+            }
+        }
+    }
+
+    static class SeekCallback extends Seek_Pointer_long_int {
+        @Override public long call(Pointer opaque, long offset, int whence) {
+            try {
+                InputStream is = inputStreams.get(opaque);
+                switch (whence) {
+                    case 0: is.reset(); break;
+                    case 1: break;
+                    default: return -1;
+                }
+                long remaining = offset;
+                while (remaining > 0) {
+                    long skipped = is.skip(remaining);
+                    if (skipped == 0) break; // end of the stream
+                    remaining -= skipped;
+                }
+                return 0;
+            } catch (Throwable t) {
+                System.err.println("Error on InputStream.reset() or skip(): " + t);
+                return -1;
+            }
+        }
+    }
+
+    static ReadCallback readCallback;
+    static SeekCallback seekCallback;
+
+    private InputStream     inputStream;
+    private AVIOContext     avio;
     private String          filename;
     private AVFormatContext oc;
     private AVStream        video_st, audio_st;
@@ -201,10 +305,14 @@ public class FFmpegFrameGrabber extends FrameGrabber {
     private AVFrame         samples_frame;
     private BytePointer[]   samples_ptr;
     private Buffer[]        samples_buf;
+    private BytePointer[]   samples_ptr_out;
+    private Buffer[]        samples_buf_out;
     private AVPacket        pkt, pkt2;
     private int             sizeof_pkt;
     private int[]           got_frame;
     private SwsContext      img_convert_ctx;
+    private SwrContext      samples_convert_ctx;
+    private int             samples_channels, samples_format, samples_rate;
     private boolean         frameGrabbed;
     private Frame           frame;
 
@@ -234,7 +342,7 @@ public class FFmpegFrameGrabber extends FrameGrabber {
     }
 
     @Override public int getAudioChannels() {
-        return audio_c == null ? super.getAudioChannels() : audio_c.channels();
+        return audioChannels > 0 || audio_c == null ? super.getAudioChannels() : audio_c.channels();
     }
 
     @Override public int getPixelFormat() {
@@ -256,7 +364,7 @@ public class FFmpegFrameGrabber extends FrameGrabber {
     }
 
     @Override public int getVideoBitrate() {
-        return video_c == null ? super.getVideoBitrate() : video_c.bit_rate();
+        return video_c == null ? super.getVideoBitrate() : (int)video_c.bit_rate();
     }
 
     @Override public double getAspectRatio() {
@@ -286,15 +394,25 @@ public class FFmpegFrameGrabber extends FrameGrabber {
     }
 
     @Override public int getAudioBitrate() {
-        return audio_c == null ? super.getAudioBitrate() : audio_c.bit_rate();
+        return audio_c == null ? super.getAudioBitrate() : (int)audio_c.bit_rate();
     }
 
     @Override public int getSampleFormat() {
-        return audio_c == null ? super.getSampleFormat() : audio_c.sample_fmt();
+        if (sampleMode == SampleMode.SHORT || sampleMode == SampleMode.FLOAT) {
+            if (sampleFormat == AV_SAMPLE_FMT_NONE) {
+                return sampleMode == SampleMode.SHORT ? AV_SAMPLE_FMT_S16 : AV_SAMPLE_FMT_FLT;
+            } else {
+                return sampleFormat;
+            }
+        } else if (audio_c != null) { // RAW
+            return audio_c.sample_fmt();
+        } else {
+            return super.getSampleFormat();
+        }
     }
 
     @Override public int getSampleRate() {
-        return audio_c == null ? super.getSampleRate() : audio_c.sample_rate();
+        return sampleRate > 0 || audio_c == null ? super.getSampleRate() : audio_c.sample_rate();
     }
 
     @Override public String getMetadata(String key) {
@@ -347,7 +465,7 @@ public class FFmpegFrameGrabber extends FrameGrabber {
             }
             if (pkt2.size() > 0) {
                 pkt2.size(0);
-                av_free_packet(pkt);
+                av_packet_unref(pkt);
             }
             /* comparing to timestamp +/- 1 avoids rouding issues for framerates
                which are no proper divisors of 1000000, e.g. where
@@ -355,10 +473,12 @@ public class FFmpegFrameGrabber extends FrameGrabber {
                to ...666 and the given timestamp has been rounded to ...667
                (or vice versa)
             */
-            while (this.timestamp > timestamp + 1 && grabFrame(false, true, false, false) != null) {
+            int count = 0; // prevent infinite loops with corrupted files
+            while (this.timestamp > timestamp + 1 && grabFrame(false, true, false, false) != null && count++ < 1000) {
                 // flush frames if seeking backwards
             }
-            while (this.timestamp < timestamp - 1 && grabFrame(false, true, false, false) != null) {
+            count = 0;
+            while (this.timestamp < timestamp - 1 && grabFrame(false, true, false, false) != null && count++ < 1000) {
                 // decode up to the desired frame
             }
             if (video_c != null) {
@@ -367,6 +487,7 @@ public class FFmpegFrameGrabber extends FrameGrabber {
         }
     }
 
+    /** Returns {@code getLengthInTime() * getFrameRate() / 1000000L)}, which is an approximation in general. */
     @Override public int getLengthInFrames() {
         // best guess...
         return (int)(getLengthInTime() * getFrameRate() / 1000000L);
@@ -375,10 +496,15 @@ public class FFmpegFrameGrabber extends FrameGrabber {
         return oc.duration() * 1000000L / AV_TIME_BASE;
     }
 
+    public AVFormatContext getFormatContext() {
+
+        return oc;
+    }
+
     public void start() throws Exception {
-        synchronized (org.bytedeco.javacpp.avcodec.class) {
+        // synchronized (org.bytedeco.javacpp.avcodec.class) {
             startUnsafe();
-        }
+        // }
     }
     void startUnsafe() throws Exception {
         int ret;
@@ -426,6 +552,24 @@ public class FFmpegFrameGrabber extends FrameGrabber {
         for (Entry<String, String> e : this.options.entrySet()) {
             av_dict_set(options, e.getKey(), e.getValue(), 0);
         }
+        if (inputStream != null) {
+            if (readCallback == null) {
+                readCallback = new ReadCallback();
+            }
+            if (seekCallback == null) {
+                seekCallback = new SeekCallback();
+            }
+            if (!inputStream.markSupported()) {
+                inputStream = new BufferedInputStream(inputStream);
+            }
+            inputStream.mark(Integer.MAX_VALUE - 8); // so that the whole input stream is seekable
+            oc = avformat_alloc_context();
+            avio = avio_alloc_context(new BytePointer(av_malloc(4096)), 4096, 0, oc, readCallback, null, seekCallback);
+            oc.pb(avio);
+
+            filename = inputStream.toString();
+            inputStreams.put(oc, inputStream);
+        }
         if ((ret = avformat_open_input(oc, filename, f, options)) < 0) {
             av_dict_set(options, "pixel_format", null, 0);
             if ((ret = avformat_open_input(oc, filename, f, options)) < 0) {
@@ -439,22 +583,25 @@ public class FFmpegFrameGrabber extends FrameGrabber {
             throw new Exception("avformat_find_stream_info() error " + ret + ": Could not find stream information.");
         }
 
-        // Dump information about file onto standard error
-        av_dump_format(oc, 0, filename, 0);
+        if (av_log_get_level() >= AV_LOG_INFO) {
+            // Dump information about file onto standard error
+            av_dump_format(oc, 0, filename, 0);
+        }
 
         // Find the first video and audio stream, unless the user specified otherwise
         video_st = audio_st = null;
+        AVCodecParameters video_par = null, audio_par = null;
         int nb_streams = oc.nb_streams();
         for (int i = 0; i < nb_streams; i++) {
             AVStream st = oc.streams(i);
             // Get a pointer to the codec context for the video or audio stream
-            AVCodecContext c = st.codec();
-            if (video_st == null && c.codec_type() == AVMEDIA_TYPE_VIDEO && (videoStream < 0 || videoStream == i)) {
+            AVCodecParameters par = st.codecpar();
+            if (video_st == null && par.codec_type() == AVMEDIA_TYPE_VIDEO && (videoStream < 0 || videoStream == i)) {
                 video_st = st;
-                video_c = c;
-            } else if (audio_st == null && c.codec_type() == AVMEDIA_TYPE_AUDIO && (audioStream < 0 || audioStream == i)) {
+                video_par = par;
+            } else if (audio_st == null && par.codec_type() == AVMEDIA_TYPE_AUDIO && (audioStream < 0 || audioStream == i)) {
                 audio_st = st;
-                audio_c = c;
+                audio_par = par;
             }
         }
         if (video_st == null && audio_st == null) {
@@ -464,9 +611,20 @@ public class FFmpegFrameGrabber extends FrameGrabber {
 
         if (video_st != null) {
             // Find the decoder for the video stream
-            AVCodec codec = avcodec_find_decoder(video_c.codec_id());
+            AVCodec codec = avcodec_find_decoder(video_par.codec_id());
             if (codec == null) {
-                throw new Exception("avcodec_find_decoder() error: Unsupported video format or codec not found: " + video_c.codec_id() + ".");
+                throw new Exception("avcodec_find_decoder() error: Unsupported video format or codec not found: " + video_par.codec_id() + ".");
+            }
+
+            /* Allocate a codec context for the decoder */
+            if ((video_c = avcodec_alloc_context3(codec)) == null) {
+                throw new Exception("avcodec_alloc_context3() error: Could not allocate video decoding context.");
+            }
+
+            /* copy the stream parameters from the muxer */
+            if ((ret = avcodec_parameters_to_context(video_c, video_st.codecpar())) < 0) {
+                release();
+                throw new Exception("avcodec_parameters_to_context() error: Could not copy the video stream parameters.");
             }
 
             options = new AVDictionary(null);
@@ -492,42 +650,25 @@ public class FFmpegFrameGrabber extends FrameGrabber {
                 throw new Exception("av_frame_alloc() error: Could not allocate RGB picture frame.");
             }
 
-            int width  = imageWidth  > 0 ? imageWidth  : video_c.width();
-            int height = imageHeight > 0 ? imageHeight : video_c.height();
-
-            switch (imageMode) {
-                case COLOR:
-                case GRAY:
-                    int fmt = getPixelFormat();
-
-                    // Determine required buffer size and allocate buffer
-                    int size = avpicture_get_size(fmt, width, height);
-                    image_ptr = new BytePointer[] { new BytePointer(av_malloc(size)).capacity(size) };
-                    image_buf = new Buffer[] { image_ptr[0].asBuffer() };
-
-                    // Assign appropriate parts of buffer to image planes in picture_rgb
-                    // Note that picture_rgb is an AVFrame, but AVFrame is a superset of AVPicture
-                    avpicture_fill(new AVPicture(picture_rgb), image_ptr[0], fmt, width, height);
-                    picture_rgb.format(fmt);
-                    picture_rgb.width(width);
-                    picture_rgb.height(height);
-                    break;
-
-                case RAW:
-                    image_ptr = new BytePointer[] { null };
-                    image_buf = new Buffer[] { null };
-                    break;
-
-                default:
-                    assert false;
-            }
+            initPictureRGB();
         }
 
         if (audio_st != null) {
             // Find the decoder for the audio stream
-            AVCodec codec = avcodec_find_decoder(audio_c.codec_id());
+            AVCodec codec = avcodec_find_decoder(audio_par.codec_id());
             if (codec == null) {
-                throw new Exception("avcodec_find_decoder() error: Unsupported audio format or codec not found: " + audio_c.codec_id() + ".");
+                throw new Exception("avcodec_find_decoder() error: Unsupported audio format or codec not found: " + audio_par.codec_id() + ".");
+            }
+
+            /* Allocate a codec context for the decoder */
+            if ((audio_c = avcodec_alloc_context3(codec)) == null) {
+                throw new Exception("avcodec_alloc_context3() error: Could not allocate audio decoding context.");
+            }
+
+            /* copy the stream parameters from the muxer */
+            if ((ret = avcodec_parameters_to_context(audio_c, audio_st.codecpar())) < 0) {
+                release();
+                throw new Exception("avcodec_parameters_to_context() error: Could not copy the audio stream parameters.");
             }
 
             options = new AVDictionary(null);
@@ -547,6 +688,46 @@ public class FFmpegFrameGrabber extends FrameGrabber {
         }
     }
 
+    private void initPictureRGB() {
+        int width  = imageWidth  > 0 ? imageWidth  : video_c.width();
+        int height = imageHeight > 0 ? imageHeight : video_c.height();
+
+        switch (imageMode) {
+            case COLOR:
+            case GRAY:
+                // If size changes I new allocation is needed -> free the old one.
+                if (image_ptr != null) {
+                    // First kill all references, then free it.
+                    image_buf = null;
+                    BytePointer[] temp = image_ptr;
+                    image_ptr = null;
+                    av_free(temp[0]);
+                }
+                int fmt = getPixelFormat();
+
+                // Determine required buffer size and allocate buffer
+                int size = av_image_get_buffer_size(fmt, width, height, 1);
+                image_ptr = new BytePointer[] { new BytePointer(av_malloc(size)).capacity(size) };
+                image_buf = new Buffer[] { image_ptr[0].asBuffer() };
+
+                // Assign appropriate parts of buffer to image planes in picture_rgb
+                // Note that picture_rgb is an AVFrame, but AVFrame is a superset of AVPicture
+                av_image_fill_arrays(new PointerPointer(picture_rgb), picture_rgb.linesize(), image_ptr[0], fmt, width, height, 1);
+                picture_rgb.format(fmt);
+                picture_rgb.width(width);
+                picture_rgb.height(height);
+                break;
+
+            case RAW:
+                image_ptr = new BytePointer[] { null };
+                image_buf = new Buffer[] { null };
+                break;
+
+            default:
+                assert false;
+        }
+    }
+    
     public void stop() throws Exception {
         release();
     }
@@ -557,13 +738,13 @@ public class FFmpegFrameGrabber extends FrameGrabber {
         }
         if (pkt2.size() > 0) {
             pkt2.size(0);
-            av_free_packet(pkt);
+            av_packet_unref(pkt);
         }
         for (int i = 0; i < numBuffers+1; i++) {
             if (av_read_frame(oc, pkt) < 0) {
                 return;
             }
-            av_free_packet(pkt);
+            av_packet_unref(pkt);
         }
     }
 
@@ -576,8 +757,12 @@ public class FFmpegFrameGrabber extends FrameGrabber {
             case GRAY:
                 // Deinterlace Picture
                 if (deinterlace) {
-                    AVPicture p = new AVPicture(picture);
-                    avpicture_deinterlace(p, p, video_c.pix_fmt(), video_c.width(), video_c.height());
+                    throw new Exception("Cannot deinterlace: Functionality moved to FFmpegFrameFilter.");
+                }
+
+                // Has the size changed?
+                if (frame.imageWidth != picture_rgb.width() || frame.imageHeight != picture_rgb.height()) {
+                    initPictureRGB();
                 }
 
                 // Convert the image into BGR or GRAY format that OpenCV uses
@@ -613,6 +798,101 @@ public class FFmpegFrameGrabber extends FrameGrabber {
         frame.imageChannels = frame.imageStride / frame.imageWidth;
     }
 
+    private void processSamples() throws Exception {
+        int ret;
+
+        int sample_format = samples_frame.format();
+        int planes = av_sample_fmt_is_planar(sample_format) != 0 ? (int)samples_frame.channels() : 1;
+        int data_size = av_samples_get_buffer_size((IntPointer)null, audio_c.channels(),
+                samples_frame.nb_samples(), audio_c.sample_fmt(), 1) / planes;
+        if (samples_buf == null || samples_buf.length != planes) {
+            samples_ptr = new BytePointer[planes];
+            samples_buf = new Buffer[planes];
+        }
+        frame.sampleRate = audio_c.sample_rate();
+        frame.audioChannels = audio_c.channels();
+        frame.samples = samples_buf;
+        int sample_size = data_size / av_get_bytes_per_sample(sample_format);
+        for (int i = 0; i < planes; i++) {
+            BytePointer p = samples_frame.data(i);
+            if (!p.equals(samples_ptr[i]) || samples_ptr[i].capacity() < data_size) {
+                samples_ptr[i] = p.capacity(data_size);
+                ByteBuffer b   = p.asBuffer();
+                switch (sample_format) {
+                    case AV_SAMPLE_FMT_U8:
+                    case AV_SAMPLE_FMT_U8P:  samples_buf[i] = b; break;
+                    case AV_SAMPLE_FMT_S16:
+                    case AV_SAMPLE_FMT_S16P: samples_buf[i] = b.asShortBuffer();  break;
+                    case AV_SAMPLE_FMT_S32:
+                    case AV_SAMPLE_FMT_S32P: samples_buf[i] = b.asIntBuffer();    break;
+                    case AV_SAMPLE_FMT_FLT:
+                    case AV_SAMPLE_FMT_FLTP: samples_buf[i] = b.asFloatBuffer();  break;
+                    case AV_SAMPLE_FMT_DBL:
+                    case AV_SAMPLE_FMT_DBLP: samples_buf[i] = b.asDoubleBuffer(); break;
+                    default: assert false;
+                }
+            }
+            samples_buf[i].position(0).limit(sample_size);
+        }
+
+        if (audio_c.channels() != getAudioChannels() || audio_c.sample_fmt() != getSampleFormat() || audio_c.sample_rate() != getSampleRate()) {
+            if (samples_convert_ctx == null || samples_channels != getAudioChannels() || samples_format != getSampleFormat() || samples_rate != getSampleRate()) {
+                samples_convert_ctx = swr_alloc_set_opts(samples_convert_ctx, av_get_default_channel_layout(getAudioChannels()), getSampleFormat(), getSampleRate(),
+                        av_get_default_channel_layout(audio_c.channels()), audio_c.sample_fmt(), audio_c.sample_rate(), 0, null);
+                if (samples_convert_ctx == null) {
+                    throw new Exception("swr_alloc_set_opts() error: Cannot allocate the conversion context.");
+                } else if ((ret = swr_init(samples_convert_ctx)) < 0) {
+                    throw new Exception("swr_init() error " + ret + ": Cannot initialize the conversion context.");
+                }
+                samples_channels = getAudioChannels();
+                samples_format = getSampleFormat();
+                samples_rate = getSampleRate();
+            }
+
+            int sample_size_in = samples_frame.nb_samples();
+            int planes_out = av_sample_fmt_is_planar(samples_format) != 0 ? (int)samples_frame.channels() : 1;
+            int sample_size_out = swr_get_out_samples(samples_convert_ctx, sample_size_in);
+            int sample_bytes_out = av_get_bytes_per_sample(samples_format);
+            int buffer_size_out = sample_size_out * sample_bytes_out * (planes_out > 1 ? 1 : samples_channels);
+            if (samples_buf_out == null || samples_buf.length != planes_out || samples_ptr_out[0].capacity() < buffer_size_out) {
+                for (int i = 0; samples_ptr_out != null && i < samples_ptr_out.length; i++) {
+                    av_free(samples_ptr_out[i].position(0));
+                }
+                samples_ptr_out = new BytePointer[planes_out];
+                samples_buf_out = new Buffer[planes_out];
+
+                for (int i = 0; i < planes_out; i++) {
+                    samples_ptr_out[i] = new BytePointer(av_malloc(buffer_size_out)).capacity(buffer_size_out);
+                    ByteBuffer b = samples_ptr_out[i].asBuffer();
+                    switch (samples_format) {
+                        case AV_SAMPLE_FMT_U8:
+                        case AV_SAMPLE_FMT_U8P:  samples_buf_out[i] = b; break;
+                        case AV_SAMPLE_FMT_S16:
+                        case AV_SAMPLE_FMT_S16P: samples_buf_out[i] = b.asShortBuffer();  break;
+                        case AV_SAMPLE_FMT_S32:
+                        case AV_SAMPLE_FMT_S32P: samples_buf_out[i] = b.asIntBuffer();    break;
+                        case AV_SAMPLE_FMT_FLT:
+                        case AV_SAMPLE_FMT_FLTP: samples_buf_out[i] = b.asFloatBuffer();  break;
+                        case AV_SAMPLE_FMT_DBL:
+                        case AV_SAMPLE_FMT_DBLP: samples_buf_out[i] = b.asDoubleBuffer(); break;
+                        default: assert false;
+                    }
+                }
+            }
+            frame.sampleRate = samples_rate;
+            frame.audioChannels = samples_channels;
+            frame.samples = samples_buf_out;
+
+            if ((ret = swr_convert(samples_convert_ctx, new PointerPointer(samples_ptr_out), sample_size_out, new PointerPointer(samples_ptr), sample_size_in)) < 0) {
+                throw new Exception("swr_convert() error " + ret + ": Cannot convert audio samples.");
+            }
+            for (int i = 0; i < planes_out; i++) {
+                samples_ptr_out[i].position(0).limit(ret * (planes_out > 1 ? 1 : samples_channels));
+                samples_buf_out[i].position(0).limit(ret * (planes_out > 1 ? 1 : samples_channels));
+            }
+        }
+    }
+
     public Frame grab() throws Exception {
         return grabFrame(true, true, true, false);
     }
@@ -628,6 +908,8 @@ public class FFmpegFrameGrabber extends FrameGrabber {
     public Frame grabFrame(boolean doAudio, boolean doVideo, boolean processImage, boolean keyFrames) throws Exception {
         if (oc == null || oc.isNull()) {
             throw new Exception("Could not grab: No AVFormatContext. (Has start() been called?)");
+        } else if ((!doVideo || video_st == null) && (!doAudio || audio_st == null)) {
+            return null;
         }
         frame.keyFrame = false;
         frame.imageWidth = 0;
@@ -684,6 +966,7 @@ public class FFmpegFrameGrabber extends FrameGrabber {
                         processImage();
                     }
                     done = true;
+                    frame.timestamp = timestamp;
                     frame.keyFrame = picture.key_frame() != 0;
                     frame.image = image_buf;
                     frame.opaque = picture;
@@ -710,51 +993,36 @@ public class FFmpegFrameGrabber extends FrameGrabber {
                         AVRational time_base = audio_st.time_base();
                         timestamp = 1000000L * pts * time_base.num() / time_base.den();
                         /* if a frame has been decoded, output it */
+                        processSamples();
                         done = true;
-                        int sample_format = samples_frame.format();
-                        int planes = av_sample_fmt_is_planar(sample_format) != 0 ? (int)samples_frame.channels() : 1;
-                        int data_size = av_samples_get_buffer_size((IntPointer)null, audio_c.channels(),
-                                samples_frame.nb_samples(), audio_c.sample_fmt(), 1) / planes;
-                        if (samples_buf == null || samples_buf.length != planes) {
-                            samples_ptr = new BytePointer[planes];
-                            samples_buf = new Buffer[planes];
-                        }
+                        frame.timestamp = timestamp;
                         frame.keyFrame = samples_frame.key_frame() != 0;
-                        frame.sampleRate = audio_c.sample_rate();
-                        frame.audioChannels = audio_c.channels();
-                        frame.samples = samples_buf;
                         frame.opaque = samples_frame;
-                        int sample_size = data_size / av_get_bytes_per_sample(sample_format);
-                        for (int i = 0; i < planes; i++) {
-                            BytePointer p = samples_frame.data(i);
-                            if (!p.equals(samples_ptr[i]) || samples_ptr[i].capacity() < data_size) {
-                                samples_ptr[i] = p.capacity(data_size);
-                                ByteBuffer b   = p.asBuffer();
-                                switch (sample_format) {
-                                    case AV_SAMPLE_FMT_U8:
-                                    case AV_SAMPLE_FMT_U8P:  samples_buf[i] = b; break;
-                                    case AV_SAMPLE_FMT_S16:
-                                    case AV_SAMPLE_FMT_S16P: samples_buf[i] = b.asShortBuffer();  break;
-                                    case AV_SAMPLE_FMT_S32:
-                                    case AV_SAMPLE_FMT_S32P: samples_buf[i] = b.asIntBuffer();    break;
-                                    case AV_SAMPLE_FMT_FLT:
-                                    case AV_SAMPLE_FMT_FLTP: samples_buf[i] = b.asFloatBuffer();  break;
-                                    case AV_SAMPLE_FMT_DBL:
-                                    case AV_SAMPLE_FMT_DBLP: samples_buf[i] = b.asDoubleBuffer(); break;
-                                    default: assert false;
-                                }
-                            }
-                            samples_buf[i].position(0).limit(sample_size);
-                        }
                     }
                 }
             }
 
             if (pkt2.size() <= 0) {
                 // Free the packet that was allocated by av_read_frame
-                av_free_packet(pkt);
+                av_packet_unref(pkt);
             }
         }
         return frame;
+    }
+
+    public AVPacket grabPacket() throws Exception {
+
+	if (oc == null || oc.isNull()) {
+	    throw new Exception("Could not trigger: No AVFormatContext. (Has start() been called?)");
+	}
+
+
+        // Return the next frame of a stream.
+        if (av_read_frame(oc, pkt) < 0) {
+            return null;
+        }
+
+	return pkt;
+
     }
 }

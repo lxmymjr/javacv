@@ -1,4 +1,5 @@
 /target/
+/platform/target/
 
 # Mac
 .DS_Store
@@ -10,3 +11,4 @@
 
 # IntelliJ
 *.iml
+.idea

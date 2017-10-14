@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Samuel Audet
+ * Copyright (C) 2015-2016 Samuel Audet
  *
  * Licensed either under the Apache License, Version 2.0, or (at your option)
  * under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@ package org.bytedeco.javacv;
 import android.graphics.Bitmap;
 import android.hardware.Camera;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 /**
  * A utility class to copy data between {@link Frame} and {@link Bitmap}.
@@ -33,12 +34,15 @@ import java.nio.ByteBuffer;
  * <p>
  * This class is not optimized for speed. For best performance, convert first
  * your data to and from RGBA with optimized functions from FFmpeg or OpenCV.
+ * Further, pixel formats other than grayscale, BGR, and RGBA are not well
+ * supported. Their conversions might fail in undefined ways.
  *
  * @author Samuel Audet
  */
 public class AndroidFrameConverter extends FrameConverter<Bitmap> {
     Bitmap bitmap;
     ByteBuffer buffer;
+    byte[] row;
 
     /**
      * Convert YUV 4:2:0 SP (NV21) data to BGR, as received, for example,
@@ -117,6 +121,52 @@ public class AndroidFrameConverter extends FrameConverter<Bitmap> {
         return frame;
     }
 
+    ByteBuffer gray2rgba(ByteBuffer in, int width, int height, int stride, int rowBytes) {
+        if (buffer == null || buffer.capacity() < height * rowBytes) {
+            buffer = ByteBuffer.allocate(height * rowBytes);
+        }
+        if (row == null || row.length != stride)
+            row = new byte[stride];
+        for (int y = 0; y < height; y++) {
+            in.position(y * stride);
+            in.get(row);
+            for (int x = 0; x < width; x++) {
+                // GRAY -> RGBA
+                byte B = row[x];
+                int rgba = (B & 0xff) << 24 |
+                           (B & 0xff) << 16 |
+                           (B & 0xff) <<  8 | 0xff;
+                buffer.putInt(y * rowBytes + 4 * x, rgba);
+            }
+        }
+        return buffer;
+    }
+
+    ByteBuffer bgr2rgba(ByteBuffer in, int width, int height, int stride, int rowBytes) {
+        if (!in.order().equals(ByteOrder.LITTLE_ENDIAN)) {
+            in = in.order(ByteOrder.LITTLE_ENDIAN);
+        }
+        if (buffer == null || buffer.capacity() < height * rowBytes) {
+            buffer = ByteBuffer.allocate(height * rowBytes);
+        }
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                // BGR -> RGBA
+                int rgb;
+                if (x < width - 1 || y < height - 1) {
+                    rgb = in.getInt(y * stride + 3 * x);
+                } else {
+                    int b = in.get(y * stride + 3 * x    ) & 0xff;
+                    int g = in.get(y * stride + 3 * x + 1) & 0xff;
+                    int r = in.get(y * stride + 3 * x + 2) & 0xff;
+                    rgb = (r << 16) | (g << 8) | b;
+                }
+                buffer.putInt(y * rowBytes + 4 * x, (rgb << 8) | 0xff);
+            }
+        }
+        return buffer;
+    }
+
     @Override public Bitmap convert(Frame frame) {
         if (frame == null || frame.image == null) {
             return null;
@@ -143,36 +193,10 @@ public class AndroidFrameConverter extends FrameConverter<Bitmap> {
         int stride = frame.imageStride;
         int rowBytes = bitmap.getRowBytes();
         if (frame.imageChannels == 1) {
-            if (buffer == null || buffer.capacity() < height * rowBytes) {
-                buffer = ByteBuffer.allocate(height * rowBytes);
-            }
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    // GRAY -> RGBA
-                    byte B = in.get(y * stride + x);
-                    buffer.put(y * rowBytes + 4 * x,     B);
-                    buffer.put(y * rowBytes + 4 * x + 1, B);
-                    buffer.put(y * rowBytes + 4 * x + 2, B);
-                    buffer.put(y * rowBytes + 4 * x + 3, (byte)0xFF);
-                }
-            }
+            gray2rgba(in, width, height, stride, rowBytes);
             bitmap.copyPixelsFromBuffer(buffer.position(0));
         } else if (frame.imageChannels == 3) {
-            if (buffer == null || buffer.capacity() < height * rowBytes) {
-                buffer = ByteBuffer.allocate(height * rowBytes);
-            }
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    // BGR -> RGBA
-                    byte B = in.get(y * stride + 3 * x    );
-                    byte G = in.get(y * stride + 3 * x + 1);
-                    byte R = in.get(y * stride + 3 * x + 2);
-                    buffer.put(y * rowBytes + 4 * x,     R);
-                    buffer.put(y * rowBytes + 4 * x + 1, G);
-                    buffer.put(y * rowBytes + 4 * x + 2, B);
-                    buffer.put(y * rowBytes + 4 * x + 3, (byte)0xFF);
-                }
-            }
+            bgr2rgba(in, width, height, stride, rowBytes);
             bitmap.copyPixelsFromBuffer(buffer.position(0));
         } else {
             // assume matching strides

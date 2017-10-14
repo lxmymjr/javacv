@@ -23,7 +23,9 @@
 package org.bytedeco.javacv;
 
 import java.beans.PropertyEditorSupport;
+import java.io.Closeable;
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -39,16 +41,18 @@ import java.util.concurrent.Future;
  *
  * @author Samuel Audet
  */
-public abstract class FrameGrabber {
+public abstract class FrameGrabber implements Closeable {
 
     public static final List<String> list = new LinkedList<String>(Arrays.asList(new String[] {
-		"DC1394", "FlyCapture", "FlyCapture2", "OpenKinect", "PS3Eye", "VideoInput", "OpenCV", "FFmpeg", "IPCamera"  }));
+		"DC1394", "FlyCapture", "FlyCapture2", "OpenKinect", "OpenKinect2", "RealSense", "PS3Eye", "VideoInput", "OpenCV", "FFmpeg", "IPCamera" }));
     public static void init() {
         for (String name : list) {
             try {
                 Class<? extends FrameGrabber> c = get(name);
                 c.getMethod("tryLoad").invoke(null);
-            } catch (Throwable t) { }
+            } catch (Throwable t) {
+                continue;
+            }
         }
     }
     public static Class<? extends FrameGrabber> getDefault() {
@@ -63,7 +67,7 @@ public abstract class FrameGrabber {
                     if (s.length > 0) {
                         mayContainCameras = true;
                     }
-                } catch (Throwable t) { 
+                } catch (Throwable t) {
                     if (t.getCause() instanceof UnsupportedOperationException) {
                         mayContainCameras = true;
                     }
@@ -71,7 +75,9 @@ public abstract class FrameGrabber {
                 if (mayContainCameras) {
                     return c;
                 }
-            } catch (Throwable t) { }
+            } catch (Throwable t) {
+                continue;
+            }
         }
         return null;
     }
@@ -160,6 +166,10 @@ public abstract class FrameGrabber {
         COLOR, GRAY, RAW
     }
 
+    public static enum SampleMode {
+        SHORT, FLOAT, RAW
+    }
+
     public static final long
             SENSOR_PATTERN_RGGB = 0,
             SENSOR_PATTERN_GBRG = (1L << 32),
@@ -173,7 +183,8 @@ public abstract class FrameGrabber {
     protected long sensorPattern = -1L;
     protected int pixelFormat = -1, videoCodec, videoBitrate = 0;
     protected double aspectRatio = 0, frameRate = 0;
-    protected int sampleFormat = 0, audioCodec, audioBitrate = 0, sampleRate = 0;
+    protected SampleMode sampleMode = SampleMode.SHORT;
+    protected int sampleFormat = -1, audioCodec, audioBitrate = 0, sampleRate = 0;
     protected boolean triggerMode = false;
     protected int bpp = 0;
     protected int timeout = 10000;
@@ -292,6 +303,13 @@ public abstract class FrameGrabber {
     }
     public void setAudioBitrate(int audioBitrate) {
         this.audioBitrate = audioBitrate;
+    }
+
+    public SampleMode getSampleMode() {
+        return sampleMode;
+    }
+    public void setSampleMode(SampleMode samplesMode) {
+        this.sampleMode = samplesMode;
     }
 
     public int getSampleFormat() {
@@ -413,7 +431,7 @@ public abstract class FrameGrabber {
         return 0;
     }
 
-    public static class Exception extends java.lang.Exception {
+    public static class Exception extends IOException {
         public Exception(String message) { super(message); }
         public Exception(String message, Throwable cause) { super(message, cause); }
     }
@@ -421,6 +439,30 @@ public abstract class FrameGrabber {
     public abstract void start() throws Exception;
     public abstract void stop() throws Exception;
     public abstract void trigger() throws Exception;
+
+    @Override public void close() throws Exception {
+        stop();
+        release();
+    }
+
+    /**
+     * Each call to grab stores the new image in the memory address for the previously returned frame. <br/>
+     * IE.<br/>
+     * <code>
+     * grabber.grab() == grabber.grab()
+     * </code>
+     * <br/>
+     * This means that if you need to cache images returned from grab you should {@link Frame#clone()} the
+     * returned frame as the next call to grab will overwrite your existing image's memory.
+     * <br/>
+     * <b>Why?</b><br/>
+     * Using this method instead of allocating a new buffer every time a frame
+     * is grabbed improves performance by reducing the frequency of garbage collections.
+     * Almost no additional heap space is typically allocated per frame.
+     *
+     * @return The frame returned from the grabber
+     * @throws Exception If there is a problem grabbing the frame.
+     */
     public abstract Frame grab() throws Exception;
     public Frame grabFrame() throws Exception { return grab(); }
     public abstract void release() throws Exception;

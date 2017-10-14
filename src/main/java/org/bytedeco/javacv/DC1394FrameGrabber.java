@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2012 Samuel Audet
+ * Copyright (C) 2009-2016 Samuel Audet
  *
  * Licensed either under the Apache License, Version 2.0, or (at your option)
  * under the terms of the GNU General Public License as published by
@@ -130,7 +130,7 @@ public class DC1394FrameGrabber extends FrameGrabber {
     private static final boolean linux = Loader.getPlatform().startsWith("linux");
     private dc1394_t d = null;
     private dc1394camera_t camera = null;
-    private pollfd fds = new pollfd();
+    private pollfd fds = linux ? new pollfd() : null;
     private boolean oneShotMode = false;
     private boolean resetDone   = false;
     private dc1394video_frame_t[] raw_image =
@@ -331,12 +331,16 @@ public class DC1394FrameGrabber extends FrameGrabber {
         } catch (Exception e) {
             // if we couldn't start, try again with a bus reset
             if (tryReset && !resetDone) {
-                dc1394_reset_bus(camera);
                 try {
+                    dc1394_reset_bus(camera);
                     Thread.sleep(100);
-                } catch (InterruptedException ex) { }
-                resetDone = true;
-                start(false, try1394b);
+                    resetDone = true;
+                    start(false, try1394b);
+                } catch (InterruptedException ex) {
+                    // reset interrupt to be nice
+                    Thread.currentThread().interrupt();
+                    throw new Exception("dc1394_reset_bus() Error: Could not reset bus and try to start again.", ex);
+                }
             } else {
                 throw e;
             }

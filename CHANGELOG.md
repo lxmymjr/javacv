@@ -1,4 +1,66 @@
 
+ * Prevent `FFmpegFrameGrabber.setTimestamp()` from going into an infinite loop ([issue #731](https://github.com/bytedeco/javacv/issues/731))
+ * Fix `FFmpegFrameRecorder.record()` when called with `AV_PIX_FMT_NV21` ([pull #787](https://github.com/bytedeco/javacv/pull/787))
+ * Add `FFmpegLockCallback` to use more efficient thread-safe mechanisms ([pull #770](https://github.com/bytedeco/javacv/pull/770))
+ * Make `FFmpegFrameGrabber` support streams with changing resolution ([pull #769](https://github.com/bytedeco/javacv/pull/769))
+ * Add new `DeinterlacedVideoPlayer` sample ([pull #757](https://github.com/bytedeco/javacv/pull/757))
+
+### July 25, 2017 version 1.3.3
+ * Fix `Java2DFrameConverter.cloneBufferedImage()` not copying the data ([pull #739](https://github.com/bytedeco/javacv/pull/739))
+ * Make sure `OpenCVFrameConverter` always resets `Frame.opaque` even when `Pointer` is equal ([issue deeplearning4j/DataVec#316](https://github.com/deeplearning4j/DataVec/issues/316))
+ * Fix `OutputStream` leak in `FFmpegFrameRecorder` ([pull #727](https://github.com/bytedeco/javacv/pull/727))
+ * Synchronize on `FFmpegFrameRecorder.stop()` to avoid potential race conditions ([issue #700](https://github.com/bytedeco/javacv/issues/700))
+ * Add `src/main/java/cl/eye/CLCamera.java` to remove build dependency on external module
+ * Fix seeking issues with `FFmpegFrameGrabber(InputStream)` ([pull #703](https://github.com/bytedeco/javacv/pull/703))
+ * Upgrade dependencies for FFmpeg 3.3.2, FlyCapture 2.11.3.121 ([pull bytedeco/javacpp-presets#424](https://github.com/bytedeco/javacpp-presets/pull/424))
+ * Initialize the `avdevice` module for `FFmpegFrameRecorder` in the same way as with `FFmpegFrameGrabber`
+ * Add `FrameGrabber.sampleMode` property and have `FFmpegFrameGrabber` convert audio samples to user-specified format ([issue #18](https://github.com/bytedeco/javacv/issues/18))
+ * Add new `ImageSegmentation` ([pull #460](https://github.com/bytedeco/javacv/pull/460)) and `FFmpegStreamingTimeout` ([pull #712](https://github.com/bytedeco/javacv/pull/712)) samples
+ * Fix up and add missing functionality to `FlyCapture2FrameGrabber` ([pull #655](https://github.com/bytedeco/javacv/pull/655))
+ * Take `OpenCVFrameGrabber.setFormat()` value to set FOURCC of `VideoCapture` ([pull #651](https://github.com/bytedeco/javacv/pull/651))
+ * Fix call to `FaceRecognizer.predict()` in samples ([issue #642](https://github.com/bytedeco/javacv/issues/642))
+
+### March 13, 2017 version 1.3.2
+ * Add `Java2DFrameUtils` to facilitate conversion between `Frame`, `BufferedImage`, `IplImage`, and `Mat`
+ * Add new `JavaFxPlayVideoAndAudio` sample ([pull #618](https://github.com/bytedeco/javacv/pull/618))
+ * Get rid of deprecated calls in `FFmpegFrameFilter`, `FFmpegFrameGrabber` and `FFmpegFrameRecorder` ([issue #607](https://github.com/bytedeco/javacv/issues/607))
+ * Fix crash in `FFmpegFrameGrabber.restart()` ([issue #605](https://github.com/bytedeco/javacv/issues/605))
+ * Upgrade dependencies for OpenCV 3.2.0, FFmpeg 3.2.1, libdc1394 2.2.5
+
+### January 14, 2017 version 1.3.1
+ * Let `FFmpegFrameRecorder` pass options to the protocol as well ([issue #598](https://github.com/bytedeco/javacv/issues/598))
+ * Add `RealSenseFrameGrabber` and `OpenKinect2FrameGrabber` to `FrameGrabber.list` to have them loaded by default
+ * Remove confusing and no longer useful profiles from the `pom.xml` file
+ * Provide new `FFmpegFrameGrabber(InputStream)` and `FFmpegFrameRecorder(OutputStream)` constructors ([issue #95](https://github.com/bytedeco/javacv/issues/95))
+ * Make `FrameFilter`, `FrameGrabber`, and `FrameRecorder` implement `Closeable` to let us try-with-resources
+ * Fix potential crash when recording audio with `FFmpegFrameRecorder`
+ * Add `OpenKinect2FrameGrabber` to capture images with libfreenect2 ([pull #584](https://github.com/bytedeco/javacv/pull/584))
+ * Add `OpenKinectFrameGrabber.grabIR()` and stabilize `RealSenseFrameGrabber` ([pull #585](https://github.com/bytedeco/javacv/pull/585))
+
+### December 7, 2016 version 1.3
+ * Fix unnecessary memory allocation in `OpenCVFrameGrabber` ([pull #575](https://github.com/bytedeco/javacv/pull/575))
+ * Add `FFmpegFrameFilter` to `RecordActivity` sample for Android ([pull #550](https://github.com/bytedeco/javacv/pull/550))
+ * Introduce platform artifact for easier cross-platform builds and to avoid issues with some build systems ([issue #395](https://github.com/bytedeco/javacv/issues/395))
+ * Add `RealSenseFrameGrabber` to capture images with librealsense ([pull #486](https://github.com/bytedeco/javacv/pull/486))
+ * Add `BioInspiredRetina.java` sample for the `opencv_bioinspired` module ([pull #505](https://github.com/bytedeco/javacv/pull/505))
+ * Update the `JavaCV` class with appropriate documentation comments ([issue #444](https://github.com/bytedeco/javacv/issues/444))
+ * Fix Javadoc links for externally referenced classes
+ * Fix seeking when calling `FFmpegFrameGrabber.setTimestamp()` on audio-only files
+ * Add more appropriate default pixel formats for JPEG formats in `FFmpegFrameRecorder` ([issue #410](https://github.com/bytedeco/javacv/issues/410))
+
+### May 15, 2016 version 1.2
+ * Optimize `AndroidFrameConverter` a bit and add a test ([pull #379](https://github.com/bytedeco/javacv/pull/379))
+ * Fix `DC1394FrameGrabber` on the Windows platform ([issue bytedeco/procamcalib#4](https://github.com/bytedeco/procamcalib/issues/4))
+ * Support `AVPacket` in `FFmpegFrameGrabber` and `FFmpegFrameRecorder` to copy without re-encoding ([issue #93](https://github.com/bytedeco/javacv/issues/93))
+ * Lower Maven prerequisite in the `pom.xml` file to 3.0 ([issue bytedeco/javacpp#93](https://github.com/bytedeco/javacpp/issues/93))
+ * Add new `PrincipalComponentAnalysis` sample ([pull #373](https://github.com/bytedeco/javacv/pull/373))
+ * Upgrade `OpenCVFrameRecorder` to use the new C++ `VideoWriter` API ([pull #370](https://github.com/bytedeco/javacv/pull/370))
+ * Upgrade `OpenCVFrameGrabber` to use the new C++ `VideoCapture` API ([pull #361](https://github.com/bytedeco/javacv/pull/361))
+ * Add `CaffeGooglenet.java` sample for the `opencv_dnn` module ([pull #341](https://github.com/bytedeco/javacv/pull/341))
+ * Clean up `IPCameraFrameGrabber` and fix incorrectly reading some headers ([pull #323](https://github.com/bytedeco/javacv/pull/323), [pull #345](https://github.com/bytedeco/javacv/pull/345))
+ * Fix swallowed `InterruptedException` and throw appropriate exception in `FrameGrabber.start()` ([issue #315](https://github.com/bytedeco/javacv/issues/315))
+ * Fix `IPCameraFrameGrabber.stop()` not checking for null ([pull #300](https://github.com/bytedeco/javacv/pull/300))
+ * Upgrade dependencies for OpenCV 3.1.0, FFmpeg 3.0.2, FlyCapture 2.9.3.43, libdc1394 2.2.4
  * Let users call `FFmpegFrameFilter.push(null)` to indicate EOF, as required by some filters like "palettegen" ([issue #287](https://github.com/bytedeco/javacv/issues/287))
  * Call `cvHaarDetectObjects()` with `CV_HAAR_FIND_BIGGEST_OBJECT | CV_HAAR_DO_ROUGH_SEARCH` instead of `CV_HAAR_DO_CANNY_PRUNING` in the face detection samples to get acceptable performance with OpenCV 3.0 ([issue #272](https://github.com/bytedeco/javacv/issues/272))
  * Change `WakeLock` for `keepScreenOn` in `AndroidManifest.xml` file and add `setPreviewDisplay()` call on `surfaceChanged()` event for the `RecordActivity` sample ([pull #269](https://github.com/bytedeco/javacv/pull/269), [pull #271](https://github.com/bytedeco/javacv/pull/271))

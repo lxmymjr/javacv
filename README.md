@@ -1,9 +1,11 @@
 JavaCV
 ======
 
+[![Join the chat at https://gitter.im/bytedeco/javacv](https://badges.gitter.im/bytedeco/javacv.svg)](https://gitter.im/bytedeco/javacv?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) [![Maven Central](https://maven-badges.herokuapp.com/maven-central/org.bytedeco/javacv/badge.svg)](https://maven-badges.herokuapp.com/maven-central/org.bytedeco/javacv) [![Build Status](https://travis-ci.org/bytedeco/javacv.svg?branch=master)](https://travis-ci.org/bytedeco/javacv)
+
 Introduction
 ------------
-JavaCV uses wrappers from the [JavaCPP Presets](https://github.com/bytedeco/javacpp-presets) of commonly used libraries by researchers in the field of computer vision ([OpenCV](http://opencv.org/), [FFmpeg](http://ffmpeg.org/), [libdc1394](http://damien.douxchamps.net/ieee1394/libdc1394/), [PGR FlyCapture](http://www.ptgrey.com/products/pgrflycapture/), [OpenKinect](http://openkinect.org/), [videoInput](http://muonics.net/school/spring05/videoInput/), [ARToolKitPlus](http://studierstube.icg.tugraz.at/handheld_ar/artoolkitplus.php), and [flandmark](http://cmp.felk.cvut.cz/~uricamic/flandmark/)), and provides utility classes to make their functionality easier to use on the Java platform, including Android.
+JavaCV uses wrappers from the [JavaCPP Presets](https://github.com/bytedeco/javacpp-presets) of commonly used libraries by researchers in the field of computer vision ([OpenCV](http://opencv.org/), [FFmpeg](http://ffmpeg.org/), [libdc1394](http://damien.douxchamps.net/ieee1394/libdc1394/), [PGR FlyCapture](http://www.ptgrey.com/products/pgrflycapture/), [OpenKinect](http://openkinect.org/), [librealsense](https://github.com/IntelRealSense/librealsense), [CL PS3 Eye Driver](https://codelaboratories.com/downloads/), [videoInput](http://muonics.net/school/spring05/videoInput/), [ARToolKitPlus](http://studierstube.icg.tugraz.at/handheld_ar/artoolkitplus.php), and [flandmark](http://cmp.felk.cvut.cz/~uricamic/flandmark/)), and provides utility classes to make their functionality easier to use on the Java platform, including Android.
 
 JavaCV also comes with hardware accelerated full-screen image display (`CanvasFrame` and `GLCanvasFrame`), easy-to-use methods to execute code in parallel on multiple cores (`Parallel`), user-friendly geometric and color calibration of cameras and projectors (`GeometricCalibrator`, `ProCamGeometricCalibrator`, `ProCamColorCalibrator`), detection and matching of feature points (`ObjectFinder`), a set of classes that implement direct image alignment of projector-camera systems (mainly `GNImageAligner`, `ProjectiveTransformer`, `ProjectiveColorTransformer`, `ProCamTransformer`, and `ReflectanceInitializer`), a blob analysis package (`Blobs`), as well as miscellaneous functionality in the `JavaCV` class. Some of these classes also have an OpenCL and OpenGL counterpart, their names ending with `CL` or starting with `GL`, i.e.: `JavaCVCL`, `GLCanvasFrame`, etc.
 
@@ -16,8 +18,8 @@ Downloads
 ---------
 To install manually the JAR files, obtain the following archives and follow the instructions in the [Manual Installation](#manual-installation) section below.
 
- * JavaCV 1.1 binary archive  [javacv-1.1-bin.zip](http://search.maven.org/remotecontent?filepath=org/bytedeco/javacv/1.1/javacv-1.1-bin.zip) (140 MB)
- * JavaCV 1.1 source archive  [javacv-1.1-src.zip](http://search.maven.org/remotecontent?filepath=org/bytedeco/javacv/1.1/javacv-1.1-src.zip) (415 KB)
+ * JavaCV 1.3.3 binary archive  [javacv-platform-1.3.3-bin.zip](http://search.maven.org/remotecontent?filepath=org/bytedeco/javacv-platform/1.3.3/javacv-platform-1.3.3-bin.zip) (212 MB)
+ * JavaCV 1.3.3 source archive  [javacv-platform-1.3.3-src.zip](http://search.maven.org/remotecontent?filepath=org/bytedeco/javacv-platform/1.3.3/javacv-platform-1.3.3-src.zip) (456 KB)
 
 The binary archive contains builds for Android, Linux, Mac OS X, and Windows. The JAR files for specific child modules or platforms can also be obtained individually from the [Maven Central Repository](http://search.maven.org/#search|ga|1|bytedeco).
 
@@ -28,28 +30,24 @@ We can also have everything downloaded and installed automatically with:
 ```xml
   <dependency>
     <groupId>org.bytedeco</groupId>
-    <artifactId>javacv</artifactId>
-    <version>1.1</version>
+    <artifactId>javacv-platform</artifactId>
+    <version>1.3.3</version>
   </dependency>
 ```
 
  * Gradle (inside the `build.gradle` file)
 ```groovy
-  repositories {
-    mavenCentral()
-  }
   dependencies {
-    compile group: 'org.bytedeco', name: 'javacv', version: '1.1'
+    compile group: 'org.bytedeco', name: 'javacv-platform', version: '1.3.3'
   }
 ```
 
  * sbt (inside the `build.sbt` file)
 ```scala
-  classpathTypes += "maven-plugin"
-  libraryDependencies += "org.bytedeco" % "javacv" % "1.1"
+  libraryDependencies += "org.bytedeco" % "javacv-platform" % "1.3.3"
 ```
 
-Additionally, we need to either set the `platform` system property (via the `-D` command line option) to something like `android-arm`, or set the `platform.dependencies` one to `true` to get all the binaries for Android, Linux, Mac OS X, and Windows. **On build systems where this does not work, we need to add the platform-specific artifacts manually.**
+This downloads binaries for all platforms, but to get binaries for only one platform we can set the `javacpp.platform` system property (via the `-D` command line option) to something like `android-arm`, `linux-x86_64`, `macosx-x86_64`, `windows-x86_64`, etc. Please refer to the [README.md file of the JavaCPP Presets](https://github.com/bytedeco/javacpp-presets#downloads) for details. Another option available for Scala users is [sbt-javacv](https://github.com/bytedeco/sbt-javacv).
 
 
 Required Software
@@ -154,8 +152,8 @@ public class Demo {
         }
 
         // The available FrameGrabber classes include OpenCVFrameGrabber (opencv_videoio),
-        // DC1394FrameGrabber, FlyCaptureFrameGrabber, OpenKinectFrameGrabber,
-        // PS3EyeFrameGrabber, VideoInputFrameGrabber, and FFmpegFrameGrabber.
+        // DC1394FrameGrabber, FlyCaptureFrameGrabber, OpenKinectFrameGrabber, OpenKinect2FrameGrabber,
+        // RealSenseFrameGrabber, PS3EyeFrameGrabber, VideoInputFrameGrabber, and FFmpegFrameGrabber.
         FrameGrabber grabber = FrameGrabber.createDefault(0);
         grabber.start();
 
@@ -262,12 +260,12 @@ Furthermore, after creating a `pom.xml` file with the following content:
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.bytedeco.javacv</groupId>
     <artifactId>demo</artifactId>
-    <version>1.1</version>
+    <version>1.3.3</version>
     <dependencies>
         <dependency>
             <groupId>org.bytedeco</groupId>
-            <artifactId>javacv</artifactId>
-            <version>1.1</version>
+            <artifactId>javacv-platform</artifactId>
+            <version>1.3.3</version>
         </dependency>
     </dependencies>
 </project>
@@ -275,7 +273,7 @@ Furthermore, after creating a `pom.xml` file with the following content:
 
 And by placing the source code above in `src/main/java/Demo.java`, we can use the following command to have everything first installed automatically and then executed by Maven:
 ```bash
- $ mvn package exec:java -Dexec.mainClass=Demo
+ $ mvn compile exec:java -Dexec.mainClass=Demo
 ```
 
 
@@ -284,8 +282,8 @@ Build Instructions
 If the binary files available above are not enough for your needs, you might need to rebuild them from the source code. To this end, the project files were created for:
 
  * Maven 3.x  http://maven.apache.org/download.html
- * JavaCPP 1.1  https://github.com/bytedeco/javacpp
- * JavaCPP Presets 1.1  https://github.com/bytedeco/javacpp-presets
+ * JavaCPP 1.3  https://github.com/bytedeco/javacpp
+ * JavaCPP Presets 1.3  https://github.com/bytedeco/javacpp-presets
 
 Once installed, simply call the usual `mvn install` command for JavaCPP, its Presets, and JavaCV. By default, no other dependencies than a C++ compiler for JavaCPP are required. Please refer to the comments inside the `pom.xml` files for further details.
 

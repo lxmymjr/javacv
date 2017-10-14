@@ -4,8 +4,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.bytedeco</groupId>
   <artifactId>javacv</artifactId>
-  <version>1.2-SNAPSHOT</version>
-  <packaging>jar</packaging>
+  <version>1.3.4-SNAPSHOT</version>
 
   <name>JavaCV</name>
   <description>Java interface to OpenCV and more</description>
@@ -37,7 +36,7 @@
   </developers>
 
   <prerequisites>
-    <maven>3.0.4</maven>
+    <maven>3.0</maven>
   </prerequisites>
 
   <scm>
@@ -63,18 +62,6 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.build.timestamp.format>yyyyMMddhhmm</maven.build.timestamp.format>
     <javacpp.version>${project.version}</javacpp.version>
-    <!-- Reinclude the following with profiles, either all: -Pall
-         or selectively: -Pmarkers,ffmpeg,dc1394,flycapture,openkinect,ps3eye,videoinput,jogamp -->
-    <exclude.markers>**/Mark*.java</exclude.markers>
-    <exclude.calibration>**/*Calibrator.java</exclude.calibration>
-    <exclude.ffmpeg>**/FFmpeg*.java</exclude.ffmpeg>
-    <exclude.dc1394>**/DC1394*.java</exclude.dc1394>
-    <exclude.flycapture>**/FlyCapture*.java</exclude.flycapture>
-    <exclude.openkinect>**/OpenKinect*.java</exclude.openkinect>
-    <exclude.ps3eye>**/PS3Eye*.java</exclude.ps3eye>
-    <exclude.videoinput>**/VideoInput*.java</exclude.videoinput>
-    <exclude.opengl>**/GL*.java</exclude.opengl>
-    <exclude.opencl>**/*CL.java</exclude.opencl>
   </properties>
 
   <dependencies>
@@ -87,27 +74,37 @@
     <dependency>
       <groupId>org.bytedeco.javacpp-presets</groupId>
       <artifactId>opencv</artifactId>
-      <version>3.0.0-${javacpp.version}</version>
+      <version>3.2.0-${javacpp.version}</version>
     </dependency>
     <dependency>
       <groupId>org.bytedeco.javacpp-presets</groupId>
       <artifactId>ffmpeg</artifactId>
-      <version>2.8.1-${javacpp.version}</version>
+      <version>3.3.2-${javacpp.version}</version>
     </dependency>
     <dependency>
       <groupId>org.bytedeco.javacpp-presets</groupId>
       <artifactId>flycapture</artifactId>
-      <version>2.8.3.1-${javacpp.version}</version>
+      <version>2.11.3.121-${javacpp.version}</version>
     </dependency>
     <dependency>
       <groupId>org.bytedeco.javacpp-presets</groupId>
       <artifactId>libdc1394</artifactId>
-      <version>2.2.3-${javacpp.version}</version>
+      <version>2.2.5-${javacpp.version}</version>
     </dependency>
     <dependency>
       <groupId>org.bytedeco.javacpp-presets</groupId>
       <artifactId>libfreenect</artifactId>
       <version>0.5.3-${javacpp.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.bytedeco.javacpp-presets</groupId>
+      <artifactId>libfreenect2</artifactId>
+      <version>0.2.0-${javacpp.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.bytedeco.javacpp-presets</groupId>
+      <artifactId>librealsense</artifactId>
+      <version>1.9.6-${javacpp.version}</version>
     </dependency>
     <dependency>
       <groupId>org.bytedeco.javacpp-presets</groupId>
@@ -156,14 +153,21 @@
       <version>2.3.1</version>
       <optional>true</optional>
     </dependency>
-
-    <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <version>4.12</version>
-      <optional>true</optional>
-    </dependency>
   </dependencies>
+
+  <repositories>
+    <repository>
+      <id>sonatype-nexus-snapshots</id>
+      <name>Sonatype Nexus Snapshots</name>
+      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+      <releases>
+        <enabled>false</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
 
   <build>
     <finalName>${project.artifactId}</finalName>
@@ -175,44 +179,13 @@
           <source>1.7</source>
           <target>1.7</target>
           <excludes>
-            <exclude>${exclude.markers}</exclude>
-            <exclude>${exclude.calibration}</exclude>
-            <exclude>${exclude.ffmpeg}</exclude>
-            <exclude>${exclude.dc1394}</exclude>
-            <exclude>${exclude.flycapture}</exclude>
-            <exclude>${exclude.openkinect}</exclude>
-            <exclude>${exclude.ps3eye}</exclude>
-            <exclude>${exclude.videoinput}</exclude>
-            <exclude>${exclude.opengl}</exclude>
-            <exclude>${exclude.opencl}</exclude>
+            <exclude>org/bytedeco/javacv/FlyCaptureFrameGrabber.java</exclude>
           </excludes>
         </configuration>
       </plugin>
       <plugin>
-        <artifactId>maven-dependency-plugin</artifactId>
-        <version>2.10</version>
-        <executions>
-          <execution>
-            <id>properties</id>
-            <goals>
-              <goal>properties</goal>
-            </goals>
-          </execution>
-          <execution>
-            <id>copy-dependencies</id>
-            <goals>
-              <goal>copy-dependencies</goal>
-            </goals>
-            <configuration>
-              <outputDirectory>${project.build.directory}</outputDirectory>
-              <stripVersion>true</stripVersion>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
         <artifactId>maven-jar-plugin</artifactId>
-        <version>2.6</version>
+        <version>3.0.2</version>
         <configuration>
           <archive>
             <manifest>
@@ -221,7 +194,7 @@
             </manifest>
             <manifestEntries>
               <!-- <addClasspath/> is broken: http://jira.codehaus.org/browse/MJAR-61 -->
-              <Class-Path>./ javacpp.jar opencv.jar ffmpeg.jar flycapture.jar libdc1394.jar libfreenect.jar videoinput.jar artoolkitplus.jar</Class-Path>
+              <Class-Path>. javacpp.jar opencv.jar ffmpeg.jar flycapture.jar libdc1394.jar libfreenect.jar libfreenect2.jar librealsense.jar videoinput.jar artoolkitplus.jar flandmark.jar</Class-Path>
               <Name>org/bytedeco/javacv/</Name>
               <Implementation-Title>${project.name}</Implementation-Title>
               <Implementation-Vendor>Bytedeco</Implementation-Vendor>
@@ -241,26 +214,8 @@
         </configuration>
       </plugin>
       <plugin>
-        <artifactId>maven-assembly-plugin</artifactId>
-        <version>2.5.5</version>
-        <configuration>
-          <descriptors>
-            <descriptor>src/main/assembly/bin.xml</descriptor>
-            <descriptor>src/main/assembly/src.xml</descriptor>
-          </descriptors>
-        </configuration>
-        <executions>
-          <execution>
-            <phase>package</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
         <artifactId>maven-source-plugin</artifactId>
-        <version>2.4</version>
+        <version>3.0.1</version>
         <executions>
           <execution>
             <id>attach-source</id>
@@ -272,7 +227,7 @@
       </plugin>
       <plugin>
         <artifactId>maven-javadoc-plugin</artifactId>
-        <version>2.10.3</version>
+        <version>2.10.4</version>
         <executions>
           <execution>
             <id>attach-javadocs</id>
@@ -280,7 +235,24 @@
               <goal>jar</goal>
             </goals>
             <configuration>
-              <detectLinks>true</detectLinks>
+              <links>
+                <link>http://bytedeco.org/javacpp/apidocs/</link>
+                <link>http://bytedeco.org/javacpp-presets/opencv/apidocs/</link>
+                <link>http://bytedeco.org/javacpp-presets/ffmpeg/apidocs/</link>
+                <link>http://bytedeco.org/javacpp-presets/flycapture/apidocs/</link>
+                <link>http://bytedeco.org/javacpp-presets/libdc1394/apidocs/</link>
+                <link>http://bytedeco.org/javacpp-presets/libfreenect/apidocs/</link>
+                <link>http://bytedeco.org/javacpp-presets/libfreenect2/apidocs/</link>
+                <link>http://bytedeco.org/javacpp-presets/librealsense/apidocs/</link>
+                <link>http://bytedeco.org/javacpp-presets/videoinput/apidocs/</link>
+                <link>http://bytedeco.org/javacpp-presets/artoolkitplus/apidocs/</link>
+                <link>http://bytedeco.org/javacpp-presets/flandmark/apidocs/</link>
+                <link>https://developer.android.com/reference/</link>
+                <link>https://jogamp.org/deployment/v2.3.1/javadoc/gluegen/javadoc/</link>
+                <link>https://jogamp.org/deployment/v2.3.1/javadoc/jocl/javadoc/</link>
+                <link>https://jogamp.org/deployment/v2.3.1/javadoc/jogl/javadoc/</link>
+                <link>http://junit.org/junit4/javadoc/4.11/</link>
+              </links>
             </configuration>
           </execution>
         </executions>
@@ -361,72 +333,6 @@
           </plugin>
         </plugins>
       </build>
-    </profile>
-
-    <profile>
-      <id>all</id>
-      <properties>
-        <exclude.markers>none</exclude.markers>
-        <exclude.calibration>none</exclude.calibration>
-        <exclude.ffmpeg>none</exclude.ffmpeg>
-        <exclude.dc1394>none</exclude.dc1394>
-        <exclude.flycapture>none</exclude.flycapture>
-        <exclude.openkinect>none</exclude.openkinect>
-        <exclude.ps3eye>none</exclude.ps3eye>
-        <exclude.videoinput>none</exclude.videoinput>
-        <exclude.opengl>none</exclude.opengl>
-        <exclude.opencl>none</exclude.opencl>
-      </properties>
-    </profile>
-    <profile>
-      <id>markers</id>
-      <properties>
-        <exclude.markers>none</exclude.markers>
-        <exclude.calibration>none</exclude.calibration>
-      </properties>
-    </profile>
-    <profile>
-      <id>ffmpeg</id>
-      <properties>
-        <exclude.ffmpeg>none</exclude.ffmpeg>
-      </properties>
-    </profile>
-    <profile>
-      <id>dc1394</id>
-      <properties>
-        <exclude.dc1394>none</exclude.dc1394>
-      </properties>
-    </profile>
-    <profile>
-      <id>flycapture</id>
-      <properties>
-        <exclude.flycapture>none</exclude.flycapture>
-      </properties>
-    </profile>
-    <profile>
-      <id>openkinect</id>
-      <properties>
-        <exclude.openkinect>none</exclude.openkinect>
-      </properties>
-    </profile>
-    <profile>
-      <id>ps3eye</id>
-      <properties>
-        <exclude.ps3eye>none</exclude.ps3eye>
-      </properties>
-    </profile>
-    <profile>
-      <id>videoinput</id>
-      <properties>
-        <exclude.videoinput>none</exclude.videoinput>
-      </properties>
-    </profile>
-    <profile>
-      <id>jogamp</id>
-      <properties>
-        <exclude.opengl>none</exclude.opengl>
-        <exclude.opencl>none</exclude.opencl>
-      </properties>
     </profile>
   </profiles>
 

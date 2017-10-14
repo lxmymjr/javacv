@@ -88,7 +88,7 @@ public class Frame implements Indexable {
 
     /** The underlying data object, for example, AVFrame, IplImage, or Mat. */
     public Object opaque;
-    
+
     /** Timestamp of the frame creation. */
     public long timestamp;
 
@@ -128,43 +128,43 @@ public class Frame implements Indexable {
     }
     /** Returns an {@link Indexer} for the <i>i</i>th image plane. */
     public <I extends Indexer> I createIndexer(boolean direct, int i) {
-        int[] sizes = {imageHeight, imageWidth, imageChannels};
-        int[] strides = {imageStride, imageChannels, 1};
+        long[] sizes = {imageHeight, imageWidth, imageChannels};
+        long[] strides = {imageStride, imageChannels, 1};
         Buffer buffer = image[i];
         Object array = buffer.hasArray() ? buffer.array() : null;
         switch (imageDepth) {
             case DEPTH_UBYTE:
-                return array != null ? (I)UByteIndexer.create((byte[])array, sizes, strides)
-                            : direct ? (I)UByteIndexer.create((ByteBuffer)buffer, sizes, strides)
-                                     : (I)UByteIndexer.create(new BytePointer((ByteBuffer)buffer), sizes, strides, false);
+                return array != null ? (I)UByteIndexer.create((byte[])array, sizes, strides).indexable(this)
+                            : direct ? (I)UByteIndexer.create((ByteBuffer)buffer, sizes, strides).indexable(this)
+                                     : (I)UByteIndexer.create(new BytePointer((ByteBuffer)buffer), sizes, strides, false).indexable(this);
             case DEPTH_BYTE:
-                return array != null ? (I)ByteIndexer.create((byte[])array, sizes, strides)
-                            : direct ? (I)ByteIndexer.create((ByteBuffer)buffer, sizes, strides)
-                                     : (I)ByteIndexer.create(new BytePointer((ByteBuffer)buffer), sizes, strides, false);
+                return array != null ? (I)ByteIndexer.create((byte[])array, sizes, strides).indexable(this)
+                            : direct ? (I)ByteIndexer.create((ByteBuffer)buffer, sizes, strides).indexable(this)
+                                     : (I)ByteIndexer.create(new BytePointer((ByteBuffer)buffer), sizes, strides, false).indexable(this);
             case DEPTH_USHORT:
-                return array != null ? (I)UShortIndexer.create((short[])array, sizes, strides)
-                            : direct ? (I)UShortIndexer.create((ShortBuffer)buffer, sizes, strides)
-                                     : (I)UShortIndexer.create(new ShortPointer((ShortBuffer)buffer), sizes, strides, false);
+                return array != null ? (I)UShortIndexer.create((short[])array, sizes, strides).indexable(this)
+                            : direct ? (I)UShortIndexer.create((ShortBuffer)buffer, sizes, strides).indexable(this)
+                                     : (I)UShortIndexer.create(new ShortPointer((ShortBuffer)buffer), sizes, strides, false).indexable(this);
             case DEPTH_SHORT:
-                return array != null ? (I)ShortIndexer.create((short[])array, sizes, strides)
-                            : direct ? (I)ShortIndexer.create((ShortBuffer)buffer, sizes, strides)
-                                     : (I)ShortIndexer.create(new ShortPointer((ShortBuffer)buffer), sizes, strides, false);
+                return array != null ? (I)ShortIndexer.create((short[])array, sizes, strides).indexable(this)
+                            : direct ? (I)ShortIndexer.create((ShortBuffer)buffer, sizes, strides).indexable(this)
+                                     : (I)ShortIndexer.create(new ShortPointer((ShortBuffer)buffer), sizes, strides, false).indexable(this);
             case DEPTH_INT:
-                return array != null ? (I)IntIndexer.create((int[])array, sizes, strides)
-                            : direct ? (I)IntIndexer.create((IntBuffer)buffer, sizes, strides)
-                                     : (I)IntIndexer.create(new IntPointer((IntBuffer)buffer), sizes, strides, false);
+                return array != null ? (I)IntIndexer.create((int[])array, sizes, strides).indexable(this)
+                            : direct ? (I)IntIndexer.create((IntBuffer)buffer, sizes, strides).indexable(this)
+                                     : (I)IntIndexer.create(new IntPointer((IntBuffer)buffer), sizes, strides, false).indexable(this);
             case DEPTH_LONG:
-                return array != null ? (I)LongIndexer.create((long[])array, sizes, strides)
-                            : direct ? (I)LongIndexer.create((LongBuffer)buffer, sizes, strides)
-                                     : (I)LongIndexer.create(new LongPointer((LongBuffer)buffer), sizes, strides, false);
+                return array != null ? (I)LongIndexer.create((long[])array, sizes, strides).indexable(this)
+                            : direct ? (I)LongIndexer.create((LongBuffer)buffer, sizes, strides).indexable(this)
+                                     : (I)LongIndexer.create(new LongPointer((LongBuffer)buffer), sizes, strides, false).indexable(this);
             case DEPTH_FLOAT:
-                return array != null ? (I)FloatIndexer.create((float[])array, sizes, strides)
-                            : direct ? (I)FloatIndexer.create((FloatBuffer)buffer, sizes, strides)
-                                     : (I)FloatIndexer.create(new FloatPointer((FloatBuffer)buffer), sizes, strides, false);
+                return array != null ? (I)FloatIndexer.create((float[])array, sizes, strides).indexable(this)
+                            : direct ? (I)FloatIndexer.create((FloatBuffer)buffer, sizes, strides).indexable(this)
+                                     : (I)FloatIndexer.create(new FloatPointer((FloatBuffer)buffer), sizes, strides, false).indexable(this);
             case DEPTH_DOUBLE:
-                return array != null ? (I)DoubleIndexer.create((double[])array, sizes, strides)
-                            : direct ? (I)DoubleIndexer.create((DoubleBuffer)buffer, sizes, strides)
-                                     : (I)DoubleIndexer.create(new DoublePointer((DoubleBuffer)buffer), sizes, strides, false);
+                return array != null ? (I)DoubleIndexer.create((double[])array, sizes, strides).indexable(this)
+                            : direct ? (I)DoubleIndexer.create((DoubleBuffer)buffer, sizes, strides).indexable(this)
+                                     : (I)DoubleIndexer.create(new DoublePointer((DoubleBuffer)buffer), sizes, strides, false).indexable(this);
             default: assert false;
         }
         return null;
@@ -173,10 +173,10 @@ public class Frame implements Indexable {
     /**Care must be taken if this method is to be used in conjunction with movie recordings.
      *  Cloning a frame containing a full HD picture (alpha channel included) would take 1920 x 1080 * 4 = 8.294.400 Bytes.
      *  Expect a heap overflow exception when using this method without cleaning up.
-     *  
+     *
      * @return A deep copy of this frame.
-     * @see {@link #cloneBufferArray} 
-     *  
+     * @see {@link #cloneBufferArray}
+     *
      * @author Extension proposed by Dragos Dutu
      * */
     @Override
@@ -209,10 +209,10 @@ public class Frame implements Indexable {
     /**
      * This private method takes a buffer array as input and returns a deep copy.
      * It is assumed that all buffers in the input array are of the same subclass.
-     * 
+     *
      * @param srcBuffers - Buffer array to be cloned
      * @return New buffer array
-     * 
+     *
      *  @author Extension proposed by Dragos Dutu
      */
     private static Buffer[] cloneBufferArray(Buffer[] srcBuffers) {
@@ -229,11 +229,11 @@ public class Frame implements Indexable {
 
             /*
              * In order to optimize the transfer we need a type check.
-             * 
+             *
              * Most CPUs support hardware memory transfer for different data
              * types, so it's faster to copy more bytes at once rather
              * than one byte per iteration as in case of ByteBuffer.
-             * 
+             *
              * For example, Intel CPUs support MOVSB (byte transfer), MOVSW
              * (word transfer), MOVSD (double word transfer), MOVSS (32 bit
              * scalar single precision floating point), MOVSQ (quad word
@@ -243,7 +243,7 @@ public class Frame implements Indexable {
              * which a buffer is checked against. If it's likely that the
              * expected buffer is of type "ShortBuffer", then it should be
              * checked at first place.
-             * 
+             *
              */
 
             if (srcBuffers[0] instanceof ByteBuffer)
@@ -286,18 +286,5 @@ public class Frame implements Indexable {
         return clonedBuffers;
 
     }
-
-    // For test purposes. Should be deleted
-    public static void main(String[] args) {
-        //Frame f = new Frame();
-        Frame f = new Frame(1,1,-16,1);
-        Frame g;
-
-        g = f.clone();
-
-        System.out.println(f.image[0]);
-        System.out.println(g.image[0]);
-
-        }
 
 }
